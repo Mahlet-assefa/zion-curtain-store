@@ -32,7 +32,9 @@ app.use((error: any, _req: express.Request, res: express.Response, _next: expres
 });
 
 async function start() {
-  const schema = await fs.readFile(path.join(__dirname, 'database/schema.sql'), 'utf8');
+  const compiledSchemaPath = path.join(__dirname, 'database/schema.sql');
+  const sourceSchemaPath = path.join(process.cwd(), 'src/database/schema.sql');
+  const schema = await fs.readFile(compiledSchemaPath, 'utf8').catch(() => fs.readFile(sourceSchemaPath, 'utf8'));
   await pool.query(schema);
   app.listen(Number(process.env.PORT) || 4000, () => console.log(`Zion API listening on ${process.env.PORT || 4000}`));
 }
