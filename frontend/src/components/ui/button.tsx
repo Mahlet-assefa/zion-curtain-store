@@ -1,0 +1,2 @@
+import { cn } from '@/lib/utils'; import type { ButtonHTMLAttributes } from 'react';
+export function Button({ className, variant='primary', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary'|'quiet'|'danger' }) { return <button className={cn(variant==='primary'?'button-primary':variant==='danger'?'inline-flex items-center justify-center gap-2 bg-[#0d47a1] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#0b3f91]':'button-quiet',className)} {...props} />; }

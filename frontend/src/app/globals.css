@@ -1,0 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { --ink: #263238; --muted: #607d8b; --mist: #e3f2fd; --sky: #90caf9; --ocean: #2196f3; --coral: #0d47a1; --line: #dbe6ec; }
+* { box-sizing: border-box; } body { margin: 0; color: var(--ink); background: #f7fbfd; font-family: var(--font-manrope), sans-serif; } button, input, select { font: inherit; } button { cursor: pointer; }
+@layer components { .panel { @apply border border-[#dbe6ec] bg-white shadow-[0_8px_30px_rgba(38,50,56,0.05)]; } .eyebrow { @apply text-[11px] font-bold uppercase tracking-[0.18em] text-[#607d8b]; } .button-primary { @apply inline-flex items-center justify-center gap-2 bg-[#2196f3] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#1976d2] disabled:cursor-not-allowed disabled:opacity-50; } .button-quiet { @apply inline-flex items-center justify-center gap-2 border border-[#dbe6ec] bg-white px-4 py-2.5 text-sm font-bold text-[#263238] transition hover:border-[#90caf9] hover:bg-[#e3f2fd]; } .field { @apply w-full border border-[#dbe6ec] bg-[#fafdff] px-3 py-2.5 text-sm outline-none transition focus:border-[#2196f3] focus:ring-2 focus:ring-[#90caf9]/30; } }
