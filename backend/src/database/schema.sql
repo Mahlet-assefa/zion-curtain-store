@@ -54,6 +54,7 @@ ALTER TABLE curtains ADD COLUMN IF NOT EXISTS item_color TEXT;
 ALTER TABLE curtains ADD COLUMN IF NOT EXISTS price_per_meter NUMERIC(12,2) DEFAULT 0;
 ALTER TABLE curtains ADD COLUMN IF NOT EXISTS stock_amount NUMERIC(10,2) DEFAULT 0;
 ALTER TABLE curtains ADD COLUMN IF NOT EXISTS item_image TEXT;
+ALTER TABLE curtains ADD COLUMN IF NOT EXISTS purchase_price_per_meter NUMERIC(12,2) NOT NULL DEFAULT 0;
 
 -- Convert existing columns to NUMERIC type for meters and decimals
 ALTER TABLE curtains ALTER COLUMN stock_amount TYPE NUMERIC(10,2) USING stock_amount::numeric;
@@ -75,6 +76,7 @@ CREATE TABLE IF NOT EXISTS curtain_sales (
   total_price NUMERIC(12,2) NOT NULL,
   sale_date TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE curtain_sales ADD COLUMN IF NOT EXISTS purchase_price_per_meter NUMERIC(12,2) NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS ledger_entries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
