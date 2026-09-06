@@ -1080,7 +1080,7 @@ export function CurtainsInventory() {
       {/* Minus (-) Record Sale Modal (with 3-Column Grid Variant Menu Selection & Credit Toggle) */}
       {minusModalCurtain && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-xs" role="dialog">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl md:p-8">
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl md:p-8">
             <div className="flex items-start justify-between">
               <div>
                 <span className="text-xs font-extrabold text-red-600 uppercase tracking-wider">Record Sale</span>
