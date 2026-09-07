@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import * as XLSX from 'xlsx';
-import { query } from '../database/client';
+import { pool, query } from '../database/client';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -324,72 +324,103 @@ router.post('/:id/stock/add', requireAuth, async (req: Request, res: Response, n
 
 // POST /api/curtains/:id/stock/deduct - Record sale & subtract stock (-)
 router.post('/:id/stock/deduct', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
     const metersSold = Number(req.body.meters_sold || req.body.meters || req.body.length_meters);
     const pricePerMeter = Number(req.body.price_per_meter || req.body.price);
+    const stockItemId = req.body.stock_item_id; // NEW: id of the specific sealed roll being sold
 
     if (isNaN(metersSold) || metersSold <= 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ message: 'Please specify a valid curtain length in meters' });
     }
     if (isNaN(pricePerMeter) || pricePerMeter < 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ message: 'Please specify a valid price per meter' });
     }
 
-    const curtainRes = await query(`
-      SELECT id, item_code, purchase_price_per_meter::float, stock_amount::float FROM curtains WHERE id::text = $1 OR item_code = $1
+    const curtainRes = await client.query(`
+      SELECT id, item_code, purchase_price_per_meter::float, stock_amount::float
+      FROM curtains WHERE id::text = $1 OR item_code = $1
+      FOR UPDATE
     `, [req.params.id]);
 
     if (!curtainRes.rowCount) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Curtain not found' });
     }
     const curtain = curtainRes.rows[0];
 
-    if (curtain.stock_amount < metersSold) {
-      return res.status(400).json({ 
-        message: `Insufficient stock. Requested: ${metersSold}m, Available: ${curtain.stock_amount}m` 
-      });
+    if (stockItemId) {
+      // A specific sealed roll was picked — only ever touch this one row.
+      const rollRes = await client.query(`
+        SELECT id, length_meters::float, status
+        FROM curtain_stock_items
+        WHERE id = $1 AND curtain_id = $2
+        FOR UPDATE
+      `, [stockItemId, curtain.id]);
+
+      if (!rollRes.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Selected roll not found' });
+      }
+      const roll = rollRes.rows[0];
+
+      if (roll.status !== 'in_stock') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'This roll was already sold. Please refresh and pick another.' });
+      }
+
+      // Sealed rolls are sold whole — no partial deduction. The meters sold
+      // must exactly match this roll's length; anything else is rejected.
+      if (Number(roll.length_meters) !== Number(metersSold)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          message: `This roll is sealed at ${roll.length_meters}m and must be sold in full. Requested: ${metersSold}m`
+        });
+      }
+
+      await client.query(`UPDATE curtain_stock_items SET status = 'sold' WHERE id = $1`, [roll.id]);
+    } else {
+      // No specific roll chosen — fall back to old FIFO behavior across all rolls.
+      if (curtain.stock_amount < metersSold) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          message: `Insufficient stock. Requested: ${metersSold}m, Available: ${curtain.stock_amount}m`
+        });
+      }
+
+      const rollsRes = await client.query(`
+        SELECT id, length_meters::float FROM curtain_stock_items
+        WHERE curtain_id = $1 AND status = 'in_stock'
+        ORDER BY length_meters ASC
+        FOR UPDATE
+      `, [curtain.id]);
     }
 
     const purchasePricePerMeter = Number(curtain.purchase_price_per_meter || 0);
     const totalPrice = Number((metersSold * pricePerMeter).toFixed(2));
 
     // Record Sale with purchase_price_per_meter
-    const saleRes = await query(`
+    const saleRes = await client.query(`
       INSERT INTO curtain_sales(curtain_id, meters_sold, purchase_price_per_meter, price_per_meter, total_price)
       VALUES($1, $2, $3, $4, $5)
       RETURNING id, meters_sold::float, purchase_price_per_meter::float, price_per_meter::float, total_price::float, sale_date
     `, [curtain.id, metersSold, purchasePricePerMeter, pricePerMeter, totalPrice]);
 
     // Update curtain aggregate stock
-    const updatedRes = await query(`
+    const updatedRes = await client.query(`
       UPDATE curtains
       SET stock_amount = GREATEST(0, stock_amount - $1), updated_at = NOW()
       WHERE id = $2
       RETURNING id, item_code, item_color, purchase_price_per_meter::float, price_per_meter::float, stock_amount::float, item_image, updated_at
     `, [metersSold, curtain.id]);
 
-    // Update in-stock roll items (reduce stock pieces)
-    const rollsRes = await query(`
-      SELECT id, length_meters::float FROM curtain_stock_items 
-      WHERE curtain_id = $1 AND status = 'in_stock'
-      ORDER BY length_meters ASC
-    `, [curtain.id]);
-
-    let remainingToDeduct = metersSold;
-    for (const roll of rollsRes.rows) {
-      if (remainingToDeduct <= 0) break;
-      if (roll.length_meters <= remainingToDeduct) {
-        await query(`UPDATE curtain_stock_items SET status = 'sold' WHERE id = $1`, [roll.id]);
-        remainingToDeduct -= roll.length_meters;
-      } else {
-        await query(`UPDATE curtain_stock_items SET length_meters = length_meters - $1 WHERE id = $2`, [remainingToDeduct, roll.id]);
-        remainingToDeduct = 0;
-      }
-    }
-
     // Insert income record into ledger entries
     const userId = (req as any).user?.id || null;
-    await query(`
+    await client.query(`
       INSERT INTO ledger_entries(kind, description, amount, created_by)
       VALUES('income', $1, $2, $3)
     `, [`Curtain Sale (${curtain.item_code} - ${metersSold}m @ ${pricePerMeter}/m)`, totalPrice, userId]);
@@ -406,7 +437,7 @@ router.post('/:id/stock/deduct', requireAuth, async (req: Request, res: Response
       const status = remainingDebt <= 0 ? 'paid' : 'open';
       const itemDesc = `Credit Sale - ${curtain.item_code} (${metersSold}m @ ${pricePerMeter}/m)`;
 
-      const debitRes = await query(`
+      const debitRes = await client.query(`
         INSERT INTO debits(customer_name, customer_phone, item_description, total_amount, paid_amount, status)
         VALUES($1, $2, $3, $4, $5, $6)
         RETURNING *, (total_amount - paid_amount)::float AS balance
@@ -414,13 +445,18 @@ router.post('/:id/stock/deduct', requireAuth, async (req: Request, res: Response
       createdDebit = debitRes.rows[0];
     }
 
+    await client.query('COMMIT');
+
     res.json({
       curtain: updatedRes.rows[0],
       sale: saleRes.rows[0],
       debit: createdDebit
     });
   } catch (error) {
+    await client.query('ROLLBACK');
     next(error);
+  } finally {
+    client.release();
   }
 });
 

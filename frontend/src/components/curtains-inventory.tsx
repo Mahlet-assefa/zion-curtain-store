@@ -355,7 +355,7 @@ export function CurtainsInventory() {
     setMinusError('');
 
     try {
-      const meters = selectedVariant ? Number(selectedVariant.length_meters) : Number(minusModalCurtain.stock_amount);
+      const meters = selectedVariant ? Number(selectedVariant.length_meters) : 0;
       const price = Number(minusPrice);
 
       if (isNaN(meters) || meters <= 0) {
