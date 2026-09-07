@@ -398,6 +398,15 @@ router.post('/:id/stock/deduct', requireAuth, async (req: Request, res: Response
         ORDER BY length_meters ASC
         FOR UPDATE
       `, [curtain.id]);
+
+      let remainingMeters = metersSold;
+      for (const roll of rollsRes.rows) {
+        if (remainingMeters <= 0) break;
+        if (Number(roll.length_meters) <= remainingMeters) {
+          await client.query(`UPDATE curtain_stock_items SET status = 'sold' WHERE id = $1`, [roll.id]);
+          remainingMeters -= Number(roll.length_meters);
+        }
+      }
     }
 
     const purchasePricePerMeter = Number(curtain.purchase_price_per_meter || 0);

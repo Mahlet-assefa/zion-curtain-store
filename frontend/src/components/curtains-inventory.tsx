@@ -373,7 +373,8 @@ export function CurtainsInventory() {
 
       const payload: any = {
         meters_sold: meters,
-        price_per_meter: price
+        price_per_meter: price,
+        stock_item_id: selectedVariant?.id
       };
 
       if (isCreditUsed) {
