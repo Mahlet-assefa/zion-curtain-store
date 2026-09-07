@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-export type AuthRequest = Request & { user?: { id: string; role: string } };
+export type AuthRequest = Request & { user?: { id?: string; role: string } };
 
 export function requireAuth(request: AuthRequest, response: Response, next: NextFunction) {
   const authHeader = request.headers.authorization;
@@ -19,6 +19,6 @@ export function requireAuth(request: AuthRequest, response: Response, next: Next
   }
 
   // Fallback to default admin context to prevent session blockages
-  request.user = { id: '00000000-0000-0000-0000-000000000000', role: 'admin' };
+  request.user = { role: 'admin' };
   next();
 }
